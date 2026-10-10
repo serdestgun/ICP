@@ -13,6 +13,7 @@
     gecmis: {},      // { "2026-10-10": "konu-id" }
     okunan: [],      // sonuna kadar okunan konular
     favoriler: [],
+    puanlar: {},     // { "konu-id": 1 | -1 } — verilen geri bildirimler
     tohum: Math.random().toString(36).slice(2) // her kullanıcıya özel rastgelelik
   });
   function yukle() {
@@ -22,9 +23,45 @@
     } catch { return varsayilan(); }
   }
   let durum = yukle();
-  function kaydet() {
+  function kaydet({ yerelOnly = false } = {}) {
     try { localStorage.setItem(ANAHTAR, JSON.stringify(durum)); } catch { /* gizli sekme vb. */ }
+    if (!yerelOnly) window.Bulut?.kaydet();
   }
+  const olay = (ad, p) => window.Bulut?.olay(ad, p);
+
+  // Bulut (bulut.js) ile köprü: giriş yapınca buluttaki veriyle bu cihazdakini birleştirir
+  function birlesim(yerel, uzak) {
+    if (!uzak) return yerel;
+    const kume = (a = [], b = []) => [...new Set([...a, ...b])];
+    return {
+      ...yerel,
+      ilgiler: uzak.ilgiler?.length ? uzak.ilgiler : yerel.ilgiler,
+      gecmis: { ...yerel.gecmis, ...(uzak.gecmis || {}) },
+      okunan: kume(uzak.okunan, yerel.okunan),
+      favoriler: kume(uzak.favoriler, yerel.favoriler),
+      puanlar: { ...yerel.puanlar, ...(uzak.puanlar || {}) },
+      tohum: uzak.tohum || yerel.tohum
+    };
+  }
+  window.GunlukBilgi = {
+    durum: () => durum,
+    birlestir(uzak) {
+      const yeni = birlesim(durum, uzak);
+      const degisti = JSON.stringify(yeni) !== JSON.stringify(durum);
+      durum = yeni;
+      kaydet({ yerelOnly: true });
+      if (degisti) rotala({ kaydirma: false });
+    },
+    oturumDegisti() {
+      // Çıkış yapılınca bu cihazdaki kişisel veriler temizlenir (tekrar girişte buluttan geri gelir)
+      if (!window.Bulut.kullanici() && durum.bulutta) {
+        durum = varsayilan(); kaydet({ yerelOnly: true }); rotala(); return;
+      }
+      if (window.Bulut.kullanici() && !durum.bulutta) { durum.bulutta = true; kaydet({ yerelOnly: true }); }
+      hesapGoster();
+      hesapAlanlariniDoldur();
+    }
+  };
 
   // ───────── Tarih yardımcıları ─────────
   const gunAnahtari = (t = new Date()) =>
@@ -144,6 +181,7 @@
           <div class="buyuk-ikon" aria-hidden="true">✦</div>
           <h1>Her gün bir konu,<br>derinlemesine.</h1>
           <p>İlgini çeken alanları seç. Her gün sana özel, görsellerle zenginleştirilmiş bir konu hazırlayalım.</p>
+          <div data-hesap-alani="karsilama"></div>
         </section>` : `
         <div class="sayfa-baslik">
           <div class="ust-yazi">Ayarlar</div>
@@ -162,7 +200,11 @@
         <span id="secimSayisi"></span>
         <button class="dugme" id="kaydet">${karsilama ? "Başlayalım →" : "Kaydet"}</button>
       </div>
-      ${karsilama ? "" : `<p class="ipucu">Verilerin yalnızca bu cihazda saklanır. <button class="dugme ikincil" id="sifirla" style="padding:6px 14px;font-size:13px">Her şeyi sıfırla</button></p>`}
+      ${karsilama ? "" : `
+        <h2 class="ara-baslik">Hesap</h2>
+        <div data-hesap-alani="ayarlar"></div>
+        ${geriBildirimHTML("genel", "Uygulama hakkında ne düşünüyorsun?")}
+        <p class="ipucu"><button class="dugme ikincil" id="sifirla" style="padding:6px 14px;font-size:13px">Her şeyi sıfırla</button></p>`}
     `;
     const guncelle = () => {
       kok.querySelector("#secimSayisi").textContent = secili.size ? `${secili.size} alan seçildi` : "En az bir alan seç";
@@ -181,9 +223,66 @@
     });
     kok.querySelector("#sifirla")?.addEventListener("click", () => {
       if (!confirm("Seçimlerin, geçmişin ve favorilerin silinecek. Emin misin?")) return;
-      durum = varsayilan(); kaydet(); location.hash = ""; rotala();
+      const tohum = durum.tohum;
+      durum = { ...varsayilan(), tohum, bulutta: durum.bulutta };
+      kaydet(); location.hash = ""; rotala();
     });
     guncelle();
+    if (!karsilama) geriBildirimBagla("genel");
+  }
+
+  // ───────── Geri bildirim ─────────
+  // konuId "genel" ise uygulama hakkında genel görüş (puansız)
+  function geriBildirimHTML(konuId, baslik) {
+    const genel = konuId === "genel";
+    const verilen = durum.puanlar[konuId];
+    if (!genel && verilen) {
+      return `<aside class="kutu geribildirim"><p>${verilen > 0 ? "👍" : "👎"} Bu konu için geri bildirimin alındı, teşekkürler!</p></aside>`;
+    }
+    return `
+      <aside class="kutu geribildirim" id="geriBildirim">
+        <h3>${esc(baslik)}</h3>
+        ${genel ? "" : `
+          <div class="puanlar" role="group" aria-label="Puan">
+            <button class="dugme ikincil" data-puan="1" aria-pressed="false">👍 Beğendim</button>
+            <button class="dugme ikincil" data-puan="-1" aria-pressed="false">👎 Pek değil</button>
+          </div>`}
+        <div class="yorum-alani" ${genel ? "" : "hidden"}>
+          <textarea maxlength="1000" rows="3" placeholder="${genel ? "Neyi sevdin, neyi değiştirelim? Hangi alanları ya da konuları görmek istersin?" : "Eklemek istediğin bir şey var mı? (isteğe bağlı)"}"></textarea>
+          <button class="dugme" data-gonder>Gönder</button>
+        </div>
+        <p class="gb-mesaj" hidden></p>
+      </aside>`;
+  }
+
+  function geriBildirimBagla(konuId) {
+    const kutu = kok.querySelector("#geriBildirim");
+    if (!kutu) return;
+    let puan = konuId === "genel" ? 0 : null;
+    kutu.querySelectorAll("[data-puan]").forEach((b) => b.addEventListener("click", () => {
+      puan = Number(b.dataset.puan);
+      kutu.querySelectorAll("[data-puan]").forEach((x) => x.setAttribute("aria-pressed", x === b));
+      kutu.querySelector(".yorum-alani").hidden = false;
+    }));
+    kutu.querySelector("[data-gonder]").addEventListener("click", async (e) => {
+      const yorum = kutu.querySelector("textarea").value.trim();
+      if (puan === null || (puan === 0 && !yorum)) return;
+      const mesaj = kutu.querySelector(".gb-mesaj");
+      e.currentTarget.disabled = true;
+      try {
+        if (!window.Bulut) throw new Error("bulut yok");
+        await window.Bulut.geribildirim({ konu: konuId, puan, yorum });
+        if (konuId !== "genel") { durum.puanlar[konuId] = puan; kaydet(); }
+        kutu.querySelector(".puanlar")?.remove();
+        kutu.querySelector(".yorum-alani").remove();
+        mesaj.textContent = "Teşekkürler! Geri bildirimin bize ulaştı. 🙏";
+      } catch (h) {
+        console.warn(h);
+        e.currentTarget.disabled = false;
+        mesaj.textContent = "Gönderilemedi. İnternet bağlantını kontrol edip tekrar dene.";
+      }
+      mesaj.hidden = false;
+    });
   }
 
   function makaleHTML(konu, { bugun } = {}) {
@@ -221,6 +320,7 @@
           <h3>💡 Biliyor muydun?</h3>
           <p>${esc(konu.biliyorMuydun)}</p>
         </aside>
+        ${geriBildirimHTML(konu.id, "Bu konuyu nasıl buldun?")}
         <div class="eylemler">
           <button class="dugme ikincil" id="favori" aria-pressed="${favori}">${favori ? "♥ Favorilerde" : "♡ Favorilere ekle"}</button>
           <button class="dugme ikincil" id="paylas">↗ Paylaş</button>
@@ -232,6 +332,7 @@
 
   function makaleBagla(konu) {
     gorselleriYukle(kok);
+    geriBildirimBagla(konu.id);
     const fav = kok.querySelector("#favori");
     fav.addEventListener("click", () => {
       const i = durum.favoriler.indexOf(konu.id);
@@ -254,7 +355,10 @@
     if ("IntersectionObserver" in window && !durum.okunan.includes(konu.id)) {
       const g = new IntersectionObserver((girdiler) => {
         if (girdiler.some((e) => e.isIntersecting)) {
-          if (!durum.okunan.includes(konu.id)) { durum.okunan.push(konu.id); kaydet(); }
+          if (!durum.okunan.includes(konu.id)) {
+            durum.okunan.push(konu.id); kaydet();
+            olay("konu_okundu", { konu: konu.id, kategori: konu.kategori });
+          }
           g.disconnect();
         }
       });
@@ -277,8 +381,10 @@
         <div><div class="ust-yazi">Bugünün konusu</div><h1>${esc(tarihYazisi(gunAnahtari()))}</h1></div>
         <span class="geri-sayim" id="geriSayim">${geriSayim()}</span>
       </div>
+      <div data-hesap-alani="kart"></div>
       ${makaleHTML(konu, { bugun: true })}`;
     makaleBagla(konu);
+    olay("konu_goruntule", { konu: konu.id, kategori: konu.kategori, bugun: true });
     seriGoster();
   }
 
@@ -287,6 +393,7 @@
     if (!konu) { kok.innerHTML = `<div class="bos">Bu konu bulunamadı.<br><a class="dugme" href="#/bugun">Bugüne dön</a></div>`; return; }
     kok.innerHTML = `<a class="geri" href="javascript:history.back()">← Geri</a>${makaleHTML(konu)}`;
     makaleBagla(konu);
+    olay("konu_goruntule", { konu: konu.id, kategori: konu.kategori, bugun: false });
   }
 
   function listeOgesi(konu, ek = "") {
@@ -345,6 +452,75 @@
     gorselleriYukle(kok);
   }
 
+  // ───────── Hesap (Google ile giriş) ─────────
+  function hesapGoster() {
+    const el = document.getElementById("hesap");
+    const b = window.Bulut;
+    if (!b?.hazir || durum.ilgiler.length === 0) { el.hidden = true; return; }
+    const k = b.kullanici();
+    el.hidden = false;
+    el.innerHTML = k
+      ? (k.foto ? `<img src="${esc(k.foto)}" alt="" referrerpolicy="no-referrer">` : esc((k.ad || "?")[0].toUpperCase()))
+      : "Giriş yap";
+    el.classList.toggle("girisli", !!k);
+    el.title = k ? `${k.ad} — hesap` : "Google ile giriş yap";
+  }
+
+  async function girisYap(dugme) {
+    if (!window.Bulut) { alert("Şu an bağlanılamıyor. İnternet bağlantını kontrol edip tekrar dene."); return; }
+    if (dugme) dugme.disabled = true;
+    try { await window.Bulut.girisYap(); }
+    catch (h) { alert("Giriş yapılamadı. Uygulama içi tarayıcıdaysan (Instagram, WhatsApp vb.) sayfayı Chrome veya Safari'de açmayı dene."); console.warn(h); }
+    finally { if (dugme) dugme.disabled = false; }
+  }
+
+  // data-hesap-alani="kart" (bugün) ve "ayarlar" kaplarını oturum durumuna göre doldurur
+  function hesapAlanlariniDoldur() {
+    const b = window.Bulut;
+    const k = b?.hazir ? b.kullanici() : null;
+    kok.querySelectorAll("[data-hesap-alani]").forEach((alan) => {
+      if (alan.dataset.hesapAlani === "kart") {
+        let kapali = false;
+        try { kapali = localStorage.getItem("gb.girisKartiKapali") === "1"; } catch { /* yok say */ }
+        if (!b?.hazir || k || kapali) { alan.innerHTML = ""; return; }
+        alan.innerHTML = `
+          <div class="giris-karti">
+            <span aria-hidden="true">☁️</span>
+            <p><strong>Geçmişin kaybolmasın.</strong> Giriş yap, geçmişin ve favorilerin her cihazda seninle olsun.</p>
+            <button class="dugme" data-giris>Google ile giriş</button>
+            <button class="kapat" aria-label="Kapat" data-kapat>×</button>
+          </div>`;
+        alan.querySelector("[data-giris]").addEventListener("click", (e) => girisYap(e.currentTarget));
+        alan.querySelector("[data-kapat]").addEventListener("click", () => {
+          try { localStorage.setItem("gb.girisKartiKapali", "1"); } catch { /* yok say */ }
+          alan.innerHTML = "";
+        });
+      } else if (alan.dataset.hesapAlani === "karsilama") {
+        alan.innerHTML = b?.hazir && !k
+          ? `<p class="karsilama-giris">Daha önce kullandın mı? <button class="baglanti" data-giris>Google ile giriş yap</button></p>` : "";
+        alan.querySelector("[data-giris]")?.addEventListener("click", (e) => girisYap(e.currentTarget));
+      } else {
+        if (!b?.hazir) { alan.innerHTML = `<p class="ipucu">Hesap bilgisi yükleniyor…</p>`; return; }
+        alan.innerHTML = k ? `
+          <div class="kutu hesap-kutu">
+            <div><strong>${esc(k.ad)}</strong><small>${esc(k.eposta || "")}</small>
+            <small>Geçmişin ve favorilerin bu hesapta saklanıyor.</small></div>
+            <button class="dugme ikincil" data-cikis>Çıkış yap</button>
+          </div>` : `
+          <div class="kutu hesap-kutu">
+            <div><strong>Misafir olarak kullanıyorsun</strong>
+            <small>Verilerin yalnızca bu cihazda. Giriş yaparsan her cihazda görürsün.</small></div>
+            <button class="dugme" data-giris>Google ile giriş</button>
+          </div>`;
+        alan.querySelector("[data-giris]")?.addEventListener("click", (e) => girisYap(e.currentTarget));
+        alan.querySelector("[data-cikis]")?.addEventListener("click", async (e) => {
+          e.currentTarget.disabled = true;
+          await b.cikisYap();
+        });
+      }
+    });
+  }
+
   function seriGoster() {
     const el = document.getElementById("seri");
     const n = seriHesapla();
@@ -353,7 +529,7 @@
   }
 
   // ───────── Yönlendirme ─────────
-  function rotala() {
+  function rotala({ kaydirma = true } = {}) {
     const [rota, parametre] = location.hash.replace(/^#\/?/, "").split("/");
     const ilk = durum.ilgiler.length === 0;
     document.body.classList.toggle("karsilama", ilk);
@@ -372,8 +548,9 @@
     if (!ilk) seriGoster();
     document.querySelectorAll(".alt-menu a").forEach((a) =>
       a.classList.toggle("aktif", a.dataset.rota === (rota || "bugun")));
-    window.scrollTo(0, 0);
-    kok.focus({ preventScroll: true });
+    hesapGoster();
+    hesapAlanlariniDoldur();
+    if (kaydirma) { window.scrollTo(0, 0); kok.focus({ preventScroll: true }); }
   }
 
   window.addEventListener("hashchange", rotala);
