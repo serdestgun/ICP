@@ -28,7 +28,8 @@ for (let i = 0; i < adlar.length; i += 40) {
   const esles = Object.fromEntries((veri.query.normalized || []).map((n) => [ad(n.to), n.from]));
   for (const p of veri.query.pages) {
     const ii = p.imageinfo?.[0];
-    bilgi.set(esles[ad(p.title)] ? ad(esles[ad(p.title)]) : ad(p.title), ii && !p.missing ? ii : null);
+    // Commons dosyaları en.wikipedia'da "missing" ama "known" görünür; imageinfo varsa dosya vardır
+    bilgi.set(esles[ad(p.title)] ? ad(esles[ad(p.title)]) : ad(p.title), ii || null);
   }
 }
 
