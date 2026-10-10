@@ -7,7 +7,9 @@ Her gün, seçtiğin ilgi alanlarından sana özel, derinlemesine ve görsellerl
 - **Görseller:** Her konunun kapak ve ara görselleri çalışma anında Wikipedia / Wikimedia Commons'tan çekilir.
 - **Geçmiş, favoriler, keşfet, okuma serisi (🔥)**
 - **PWA:** Telefona "Ana ekrana ekle" ile uygulama gibi kurulabilir, çevrimdışı açılır.
-- Sunucu, hesap veya veritabanı gerekmez; tüm veriler kullanıcının cihazında (localStorage) tutulur.
+- **Google ile giriş (isteğe bağlı):** Giriş yapan kullanıcının alanları, geçmişi, favorileri Firebase Firestore'da saklanır ve her cihazda görünür. Misafirler yalnızca cihazlarında (localStorage) saklar; giriş yapınca cihazdaki veri hesaba aktarılır.
+- **Geri bildirim:** Her konunun sonunda 👍/👎 ve yorum, Alanlar sayfasında genel görüş kutusu. Kayıtlar Firestore'daki `geribildirim` koleksiyonuna düşer.
+- **Analitik:** Firebase Analytics ile `konu_goruntule`, `konu_okundu`, `login`, `geri_bildirim` olayları.
 
 ## Çalıştırma
 
@@ -22,6 +24,10 @@ python3 -m http.server 8000
 ## Yayınlama
 
 Klasörü olduğu gibi herhangi bir statik barındırmaya koyabilirsin: GitHub Pages, Netlify, Vercel, Cloudflare Pages.
+
+## Firebase
+
+Yapılandırma `bulut.js` içinde. Güvenlik kuralları repodaki `firestore.rules` dosyasında; Firebase konsolunda **Firestore Database → Rules** sekmesine yapıştırıp **Publish** edilmeli. Firebase'e ulaşılamazsa uygulama misafir modunda çalışmaya devam eder.
 
 ## Yeni konu eklemek
 
@@ -48,6 +54,7 @@ Yeni bir alan eklemek için `data/kategoriler.js`'e bir satır ekle.
 |---|---|
 | `index.html` | Sayfa iskeleti |
 | `styles.css` | Tasarım (açık/koyu tema) |
-| `app.js` | Günlük seçim algoritması, sayfalar, görsel yükleme |
+| `app.js` | Günlük seçim algoritması, sayfalar, görsel yükleme, geri bildirim |
+| `bulut.js` | Firebase: Google ile giriş, Firestore senkronizasyonu, analitik |
 | `data/` | Kategoriler ve konu içerikleri |
 | `sw.js`, `manifest.webmanifest`, `icon.svg` | Kurulabilir uygulama (PWA) ve çevrimdışı destek |

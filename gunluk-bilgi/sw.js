@@ -1,6 +1,6 @@
 // Uygulama kabuğunu ve görülen görselleri önbelleğe alır; uygulama çevrimdışı da açılır.
-const SURUM = "gb-v1";
-const KABUK = ["./", "index.html", "styles.css", "app.js", "data/kategoriler.js", "data/konular.js", "icon.svg", "manifest.webmanifest"];
+const SURUM = "gb-v2";
+const KABUK = ["./", "index.html", "styles.css", "app.js", "bulut.js", "data/kategoriler.js", "data/konular.js", "icon.svg", "manifest.webmanifest"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(SURUM).then((c) => c.addAll(KABUK)).then(() => self.skipWaiting()));
