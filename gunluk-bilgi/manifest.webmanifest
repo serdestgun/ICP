@@ -1,0 +1,14 @@
+{
+  "name": "Günlük Bilgi",
+  "short_name": "Günlük Bilgi",
+  "description": "Her gün ilgi alanlarına göre sana özel, derinlemesine bir konu.",
+  "lang": "tr",
+  "start_url": "./#/bugun",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f7f4ee",
+  "theme_color": "#b45309",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
