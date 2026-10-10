@@ -137,8 +137,6 @@ body.karsilama { padding-bottom: 16px; }
 .kapak img.yuklendi { opacity: 1; }
 .kapak .yedek-ikon { position: absolute; inset: 0; display: grid; place-items: center; font-size: 84px; opacity: .9; }
 .kapak.gorselli .yedek-ikon { display: none; }
-.kapak-kredi, .gorsel-kredi { font-size: 11px; color: var(--metin-2); margin-top: 6px; }
-.kapak-kredi a, .gorsel-kredi a { color: inherit; }
 
 .etiket {
   display: inline-flex; align-items: center; gap: 6px;
@@ -162,7 +160,6 @@ body.karsilama { padding-bottom: 16px; }
   border-radius: var(--yaricap); overflow: hidden; background: var(--yuzey-2);
   min-height: 160px; display: grid; place-items: center;
 }
-.ara-gorsel img { width: 100%; max-height: 460px; object-fit: cover; }
 
 .kutu {
   background: var(--yuzey); border: 1px solid var(--cizgi);
@@ -251,3 +248,12 @@ body.karsilama { padding-bottom: 16px; }
 .geribildirim .yorum-alani .dugme { justify-self: start; }
 .geribildirim p { margin: 0; }
 .gb-mesaj { margin-top: 10px !important; font-weight: 500; }
+
+/* Görsel açıklamaları */
+.kapak-figur { margin: 0; }
+.kapak-figur figcaption, .ara-gorsel figcaption { margin-top: 8px; font-size: 13px; line-height: 1.45; color: var(--metin-2); }
+.gorsel-aciklama { display: block; color: var(--metin); opacity: .85; }
+.gorsel-kredi { font-size: 11px; color: var(--metin-2); }
+.bolum p + p { margin-top: 14px; }
+.kapak img { object-position: var(--odak, 50% 50%); }
+.ara-gorsel img { width: 100%; height: auto; max-height: 520px; object-fit: contain; }

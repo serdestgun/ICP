@@ -125,47 +125,38 @@
     return n;
   }
 
-  // ───────── Görseller (Wikipedia / Wikimedia Commons) ─────────
-  const gorselOnbellek = new Map();
-  function gorselGetir(baslik) {
-    if (gorselOnbellek.has(baslik)) return gorselOnbellek.get(baslik);
-    const anahtar = "gb.gorsel." + baslik;
-    let kayitli = null;
-    try { kayitli = JSON.parse(localStorage.getItem(anahtar)); } catch { /* yok say */ }
-    const istek = kayitli
-      ? Promise.resolve(kayitli)
-      : fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(baslik)}`)
-          .then((y) => (y.ok ? y.json() : null))
-          .then((v) => {
-            if (!v || !(v.thumbnail || v.originalimage)) return null;
-            const kucuk = v.thumbnail?.source;
-            const buyuk = v.originalimage && v.originalimage.width <= 1280
-              ? v.originalimage.source
-              : kucuk?.replace(/\/\d+px-/, "/960px-") || v.originalimage?.source;
-            const sonuc = { kucuk: kucuk || buyuk, buyuk, sayfa: v.content_urls?.desktop?.page, baslik: v.title };
-            try { localStorage.setItem(anahtar, JSON.stringify(sonuc)); } catch { /* dolu olabilir */ }
-            return sonuc;
-          })
-          .catch(() => null);
-    gorselOnbellek.set(baslik, istek);
-    return istek;
+  // ───────── Görseller (Wikimedia Commons) ─────────
+  // Her görsel { dosya, aciklama } biçimindedir; dosya adı sabit olduğu için açıklama hep doğru görsele aittir.
+  const gorselAdresi = (dosya, genislik) =>
+    `https://en.wikipedia.org/wiki/Special:FilePath/${encodeURIComponent(dosya)}?width=${genislik}`;
+  const dosyaSayfasi = (dosya) => `https://en.wikipedia.org/wiki/File:${encodeURIComponent(dosya.replace(/ /g, "_"))}`;
+
+  function gorselFigur(g, sinif, alt) {
+    return `
+      <figure class="${sinif}">
+        <div class="cerceve" data-gorsel="${esc(g.dosya)}" data-alt="${esc(alt)}"></div>
+        <figcaption>
+          <span class="gorsel-aciklama">${esc(g.aciklama)}</span>
+          <a class="gorsel-kredi" href="${dosyaSayfasi(g.dosya)}" target="_blank" rel="noopener">Wikimedia Commons</a>
+        </figcaption>
+      </figure>`;
   }
 
-  // data-gorsel="Başlık" data-boyut="buyuk|kucuk" olan kapları doldurur
+  // data-gorsel="Dosya adı" data-boyut="kucuk" olan kapları doldurur
   function gorselleriYukle(kok) {
-    kok.querySelectorAll("[data-gorsel]").forEach(async (kap) => {
-      const g = await gorselGetir(kap.dataset.gorsel);
-      if (!g) { kap.closest(".ara-gorsel")?.remove(); return; }
+    kok.querySelectorAll("[data-gorsel]").forEach((kap) => {
+      const kucuk = kap.dataset.boyut === "kucuk";
       const img = new Image();
-      img.alt = kap.dataset.alt || g.baslik;
-      img.loading = "lazy";
+      img.alt = kap.dataset.alt || "";
+      img.loading = kap.closest(".kapak-figur") ? "eager" : "lazy";
       img.decoding = "async";
-      img.src = kap.dataset.boyut === "kucuk" ? g.kucuk : g.buyuk;
-      img.onerror = () => { if (img.src !== g.kucuk) img.src = g.kucuk; else kap.closest(".ara-gorsel")?.remove(); };
+      img.src = gorselAdresi(kap.dataset.gorsel, kucuk ? 250 : 960);
+      img.onerror = () => {
+        img.remove();
+        if (!kap.closest(".kapak-figur")) kap.closest("figure")?.remove();
+      };
       img.onload = () => { img.classList.add("yuklendi"); kap.classList.add("gorselli"); };
       kap.appendChild(img);
-      const kredi = kap.parentElement.querySelector("[data-kredi]");
-      if (kredi && g.sayfa) kredi.innerHTML = `Görsel: <a href="${g.sayfa}" target="_blank" rel="noopener">Wikipedia / Wikimedia Commons</a>`;
     });
   }
 
@@ -285,28 +276,36 @@
     });
   }
 
+  // Ortalama okuma hızı: dakikada ~160 kelime
+  function okumaSuresi(konu) {
+    const metin = [konu.giris, ...konu.bolumler.map((b) => b.metin), ...konu.bilgiler, konu.biliyorMuydun].join(" ");
+    return Math.max(1, Math.round(metin.split(/\s+/).length / 160));
+  }
+
   function makaleHTML(konu, { bugun } = {}) {
     const kat = kategoriBul(konu.kategori);
     const [kapak, ...ekler] = konu.gorseller;
     const favori = durum.favoriler.includes(konu.id);
+    // Ara görselleri bölümlerin arasına eşit aralıklarla yerleştir
+    const n = konu.bolumler.length;
+    const yerlesim = new Map(ekler.map((g, j) => [Math.max(0, Math.floor(((j + 1) * n) / (ekler.length + 1)) - 1), g]));
     const bolumler = konu.bolumler.map((b, i) => `
-      <section class="bolum"><h2>${esc(b.baslik)}</h2><p>${esc(b.metin)}</p></section>
-      ${ekler[i] ? `
-        <figure class="ara-gorsel">
-          <div class="cerceve" data-gorsel="${esc(ekler[i])}" data-alt="${esc(konu.baslik)}"></div>
-          <figcaption class="gorsel-kredi" data-kredi></figcaption>
-        </figure>` : ""}`).join("");
+      <section class="bolum"><h2>${esc(b.baslik)}</h2>${b.metin.split(/\n\n+/).map((p) => `<p>${esc(p)}</p>`).join("")}</section>
+      ${yerlesim.has(i) ? gorselFigur(yerlesim.get(i), "ara-gorsel", konu.baslik) : ""}`).join("");
     return `
       <article class="makale" style="--renk:${kat.renk}">
-        <figure style="margin:0">
-          <div class="kapak" data-gorsel="${esc(kapak)}" data-alt="${esc(konu.baslik)}">
+        <figure class="kapak-figur">
+          <div class="kapak" data-gorsel="${esc(kapak.dosya)}" data-alt="${esc(konu.baslik)}" style="--odak:${kapak.odak || "50% 50%"}">
             <div class="yedek-ikon" aria-hidden="true">${kat.ikon}</div>
           </div>
-          <figcaption class="kapak-kredi" data-kredi></figcaption>
+          <figcaption>
+            <span class="gorsel-aciklama">${esc(kapak.aciklama)}</span>
+            <a class="gorsel-kredi" href="${dosyaSayfasi(kapak.dosya)}" target="_blank" rel="noopener">Wikimedia Commons</a>
+          </figcaption>
         </figure>
         <div class="makale-ust">
           <a class="etiket" href="#/kesfet/${kat.id}">${kat.ikon} ${esc(kat.ad)}</a>
-          <span class="sure">${konu.sure} dk okuma${bugun ? " · Bugünün konusu" : ""}</span>
+          <span class="sure">${okumaSuresi(konu)} dk okuma${bugun ? " · Bugünün konusu" : ""}</span>
         </div>
         <h1>${esc(konu.baslik)}</h1>
         <p class="altbaslik">${esc(konu.altbaslik)}</p>
@@ -400,7 +399,7 @@
     const kat = kategoriBul(konu.kategori);
     return `
       <a class="liste-ogesi" href="#/konu/${konu.id}" style="--renk:${kat.renk}">
-        <div class="kucuk-gorsel" data-gorsel="${esc(konu.gorseller[0])}" data-boyut="kucuk" data-alt="">${kat.ikon}</div>
+        <div class="kucuk-gorsel" data-gorsel="${esc(konu.gorseller[0].dosya)}" data-boyut="kucuk" data-alt="">${kat.ikon}</div>
         <div>
           <div class="ust-yazi">${esc(kat.ad)}${ek ? ` · ${ek}` : ""}</div>
           <strong>${esc(konu.baslik)}</strong>
@@ -435,8 +434,8 @@
     const konular = KONULAR.filter((k) => aktif === "hepsi" || k.kategori === aktif);
     const okunan = konular.filter((k) => durum.okunan.includes(k.id)).length;
     kok.innerHTML = `
-      <div class="sayfa-baslik"><div class="ust-yazi">Keşfet</div><h1>Tüm konular</h1>
-        <p>Yarını beklemek istemiyorsan istediğin konuyu şimdi oku.</p></div>
+      <div class="sayfa-baslik"><div class="ust-yazi">Keşfet</div><h1>Bugünün okumaları</h1>
+        <p>Bugün seni bekleyen konular bunlar. Yarın bambaşkaları gelecek.</p></div>
       <div class="filtreler" role="group" aria-label="Alan filtresi">
         <button class="filtre" data-f="hepsi" aria-pressed="${aktif === "hepsi"}">Hepsi</button>
         ${KATEGORILER.map((k) => `<button class="filtre" data-f="${k.id}" aria-pressed="${aktif === k.id}">${k.ikon} ${esc(k.ad)}</button>`).join("")}

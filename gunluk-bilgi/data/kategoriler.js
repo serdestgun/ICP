@@ -9,3 +9,6 @@ window.KATEGORILER = [
   { id: "felsefe", ad: "Felsefe", ikon: "🤔", renk: "#7c3aed", aciklama: "Büyük sorular ve onları soran büyük zihinler" },
   { id: "teknoloji", ad: "Teknoloji", ikon: "💻", renk: "#475569", aciklama: "Matbaadan çiplere, dünyayı dönüştüren icatlar" }
 ];
+
+// Konular data/konular/<alan>.js dosyalarında bu diziye eklenir.
+window.KONULAR = [];
